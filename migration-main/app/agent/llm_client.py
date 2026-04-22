@@ -181,21 +181,12 @@ def generate_sqls(NEXT_SQL_INFO, last_error=None, last_sql=None, source_ddl=None
         """
 
     if is_append:
-        retry_clause = ""
-        if last_error:
-            retry_clause = f"""
-- **[재시도 중복 방지 필수]** 이전 실행에서 소스 데이터가 이미 INSERT되었을 수 있습니다.
-  migration_sql은 반드시 아래 순서로 작성하십시오:
-  (1) DELETE FROM {to_table} WHERE (소스 테이블과 JOIN 또는 EXISTS를 사용해 이번에 이관할 행과 동일한 행만 선별 삭제)
-  (2) INSERT INTO {to_table} ... SELECT ... FROM {from_table}
-  ※ 다른 작업(선행 job)이 INSERT한 행은 절대 삭제하지 마십시오. 이번 소스와 대응되는 행만 삭제하십시오."""
-
         prompt += f"""
 
 [참고: 누적(Append) 모드 — migration_sql 지침]
 - 타겟 테이블 '{to_table}'이 이미 존재하며 다른 작업(선행 job)이 INSERT한 데이터가 있습니다.
 - 'ddl_sql'은 빈 문자열로 두어도 됩니다.
-- 기존 데이터를 보존하면서 이번 소스 데이터만 추가하는 migration_sql을 작성하십시오.{retry_clause}
+- 기존 데이터를 보존하면서 이번 소스 데이터만 추가하는 INSERT 문을 작성하십시오.
 """
 
     try:
