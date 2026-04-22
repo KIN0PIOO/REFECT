@@ -25,3 +25,6 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# DB 마이그레이션 케이스 (민감 정보 포함 — 절대 커밋 금지)
+insert_mig_cases.sql

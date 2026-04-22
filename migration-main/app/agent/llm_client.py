@@ -135,9 +135,13 @@ def generate_sqls(NEXT_SQL_INFO, last_error=None, last_sql=None, source_ddl=None
        - 소스에 파생 표현식(파생 컬럼)이 많은 경우, 핵심 로직은 내부 서브쿼리(src_base)에서 처리하고 외부 SELECT에서는 매핑만 수행하십시오.
 
     3. verification_sql:
-       - **[구조적 제약]** 반드시 `SELECT ABS(S.CNT - T.CNT) AS DIFF FROM (...) S JOIN (...) T ON ...` 형식을 취하십시오.
-       - **[타입 안전]** 조인(ON) 및 비교 시 데이터 타입이 다르면 반드시 `CAST` 또는 `TO_NUMBER`를 사용하십시오.
+       - **[구조 필수]** 반드시 UNION ALL로 아래 두 가지 검증 항목을 모두 포함하십시오:
+         (1) 행 개수 검증: `SELECT ABS(S.CNT - T.CNT) AS DIFF FROM (SELECT COUNT(*) CNT FROM {from_table}) S, (SELECT COUNT(*) CNT FROM {to_table}) T`
+         (2) 매핑된 각 컬럼별 NOT NULL 개수 검증: 매핑된 컬럼마다 `SELECT ABS(S.CNT - T.CNT) AS DIFF FROM (SELECT COUNT(소스컬럼) CNT FROM {from_table}) S, (SELECT COUNT(타겟컬럼) CNT FROM {to_table}) T` 형식으로 UNION ALL 하십시오.
+         - 소스 컬럼이 표현식(CASE WHEN 등)인 경우, NOT NULL 개수 대신 `COUNT(*) FILTER` 없이 해당 표현식을 COUNT(CASE WHEN ... THEN 1 END) 형태로 변환하십시오.
+       - **[타입 안전]** 비교 시 데이터 타입이 다르면 반드시 `CAST` 또는 `TO_NUMBER`를 사용하십시오.
        - **[단일 출력]** 오직 'DIFF' 컬럼 하나만 출력해야 합니다. 다른 정보를 섞지 마십시오.
+       - **[합격 기준]** 모든 UNION ALL 행의 DIFF가 전부 0이어야 검증 통과입니다.
 
     4. 공통:
        - 출력은 반드시 JSON 형태여야 하며, SQL 내부에 불필요한 주석을 넣지 마십시오.
@@ -159,7 +163,32 @@ def generate_sqls(NEXT_SQL_INFO, last_error=None, last_sql=None, source_ddl=None
         """
 
     if is_append:
-        prompt += f"\n\n[참고: 누적(Append) 모드]\n- 타겟 테이블 '{to_table}'이 이미 존재하며 데이터가 적재되어 있습니다.\n- 'ddl_sql'은 무시되므로 빈 문자열(또는 형식상 생성)로 두어도 됩니다.\n- 기존 데이터를 보존하면서 새로운 데이터를 추가하는 'migration_sql' 작성에 집중하십시오.\n"
+        retry_clause = ""
+        if last_error:
+            retry_clause = f"""
+- **[재시도 중복 방지 필수]** 이전 실행에서 소스 데이터가 이미 INSERT되었을 수 있습니다.
+  migration_sql은 반드시 아래 순서로 작성하십시오:
+  (1) DELETE FROM {to_table} WHERE (소스 테이블과 JOIN 또는 EXISTS를 사용해 이번에 이관할 행과 동일한 행만 선별 삭제)
+  (2) INSERT INTO {to_table} ... SELECT ... FROM {from_table}
+  ※ 다른 작업(선행 job)이 INSERT한 행은 절대 삭제하지 마십시오. 이번 소스와 대응되는 행만 삭제하십시오."""
+
+        prompt += f"""
+
+[참고: 누적(Append) 모드]
+- 타겟 테이블 '{to_table}'이 이미 존재하며 다른 작업(선행 job)이 INSERT한 데이터가 있습니다.
+- 'ddl_sql'은 빈 문자열로 두어도 됩니다.
+- 기존 데이터를 보존하면서 이번 소스 데이터만 추가하는 migration_sql을 작성하십시오.{retry_clause}
+- **[Append 모드 검증 필수]** verification_sql에서 타겟 전체 COUNT(*)를 소스와 비교하면 선행 job의 데이터까지 포함되어 항상 불일치합니다.
+  반드시 타겟을 소스와 JOIN 또는 EXISTS로 필터링하여 이번에 이관한 행만 COUNT하십시오:
+  예시 구조)
+  SELECT ABS(S.CNT - T.CNT) AS DIFF
+  FROM (SELECT COUNT(*) CNT FROM {from_table}) S,
+       (SELECT COUNT(*) CNT FROM {to_table} T
+        WHERE EXISTS (
+            SELECT 1 FROM {from_table} SRC
+            WHERE T.{{타겟_키_컬럼}} = SRC.{{소스_키_컬럼}}
+        )) T
+"""
 
     try:
         #logger.debug(f"[LLM_PROMPT] map_id={NEXT_SQL_INFO.map_id}\n{'='*60}\n{prompt}\n{'='*60}")

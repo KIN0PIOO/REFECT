@@ -126,10 +126,11 @@ def check_dependencies(map_id: int, to_table: str, priority: int) -> str:
     logger.debug(f"[Repository] map_id={map_id} | TO_TABLE={to_table} 의존성 체크 시작")
     
     query = """
-        SELECT STATUS FROM NEXT_MIG_INFO 
-        WHERE TO_TABLE = :1 
+        SELECT STATUS FROM NEXT_MIG_INFO
+        WHERE DBMS_LOB.SUBSTR(TO_TABLE, 200, 1) = :1
           AND PRIORITY < :2
           AND MAP_ID != :3
+          AND USE_YN = 'Y'
         ORDER BY PRIORITY DESC
     """
     
@@ -158,8 +159,8 @@ def is_first_job_for_target(map_id: int, to_table: str, priority: int) -> bool:
     해당 TO_TABLE을 처리하는 작업 중 현재 작업이 가장 우선순위가 높은(최초) 작업인지 확인합니다.
     """
     query = """
-        SELECT COUNT(*) FROM NEXT_MIG_INFO 
-        WHERE TO_TABLE = :1 
+        SELECT COUNT(*) FROM NEXT_MIG_INFO
+        WHERE DBMS_LOB.SUBSTR(TO_TABLE, 200, 1) = :1
           AND PRIORITY < :2
           AND MAP_ID != :3
     """
