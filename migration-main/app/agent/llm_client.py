@@ -159,6 +159,9 @@ def generate_sqls(NEXT_SQL_INFO, last_error=None, last_sql=None, source_ddl=None
        - 'INSERT INTO {to_table} (컬럼...) SELECT (표현식...) FROM {from_table}' 형식을 따르십시오.
        - 소스 테이블명이 {from_table}이면 alias를 사용하여 가독성을 높이십시오 (예: FROM {from_table} src).
        - 소스에 파생 표현식(파생 컬럼)이 많은 경우, 핵심 로직은 내부 서브쿼리(src_base)에서 처리하고 외부 SELECT에서는 매핑만 수행하십시오.
+       - **[FR_COL 준수 — 절대 원칙]** SELECT 절의 각 표현식은 반드시 위 [컬럼 매핑 정보]의 FR_COL 값을 그대로 사용하십시오.
+         FR_COL에 `A.CATE_S_CD`라고 명시되어 있으면 SELECT에 반드시 `A.CATE_S_CD`를 써야 합니다.
+         다른 테이블의 컬럼이나 유사해 보이는 컬럼명으로 임의 대체하는 것은 치명적인 오류입니다.
 {verification_instruction}
 
     4. 공통:
